@@ -1,0 +1,99 @@
+const express = require('express');
+const router = express.Router();
+const { pool } = require('../config/db');
+const { authMiddleware, checkRole } = require('../middleware/auth');
+
+// @route   GET api/students/:studentId/projects
+// @desc    List projects of a student (public)
+// @access  Public
+router.get('/:studentId/projects', async (req, res) => {
+    try {
+        const [rows] = await pool.execute('SELECT * FROM projects WHERE student_id = ?', [req.params.studentId]);
+        res.json(rows);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
+
+// @route   POST api/projects
+// @desc    Create a new project for the authenticated student
+// @access  Private, student only
+router.post('/', authMiddleware, checkRole('student'), async (req, res) => {
+    const { title, description, image_url, project_link } = req.body;
+
+    try {
+        const [studentRows] = await pool.execute('SELECT id FROM students WHERE user_id = ?', [req.user.id]);
+        if (studentRows.length === 0) {
+            return res.status(404).json({ msg: 'Student record not found' });
+        }
+
+        const [result] = await pool.execute(
+            'INSERT INTO projects (student_id, title, description, image_url, project_link) VALUES (?, ?, ?, ?, ?)',
+            [studentRows[0].id, title, description, image_url, project_link]
+        );
+
+        const [newProject] = await pool.execute('SELECT * FROM projects WHERE id = ?', [result.insertId]);
+        res.json(newProject[0]);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
+
+// @route   PUT api/projects/:id
+// @desc    Update own project
+// @access  Private, student only
+router.put('/:id', authMiddleware, checkRole('student'), async (req, res) => {
+    const { title, description, image_url, project_link } = req.body;
+
+    try {
+        const [studentRows] = await pool.execute('SELECT id FROM students WHERE user_id = ?', [req.user.id]);
+        const [projectRows] = await pool.execute('SELECT * FROM projects WHERE id = ?', [req.params.id]);
+
+        if (projectRows.length === 0) {
+            return res.status(404).json({ msg: 'Project not found' });
+        }
+
+        if (projectRows[0].student_id !== studentRows[0].id) {
+            return res.status(401).json({ msg: 'Not authorized' });
+        }
+
+        await pool.execute(
+            'UPDATE projects SET title = ?, description = ?, image_url = ?, project_link = ? WHERE id = ?',
+            [title, description, image_url, project_link, req.params.id]
+        );
+
+        const [updatedProject] = await pool.execute('SELECT * FROM projects WHERE id = ?', [req.params.id]);
+        res.json(updatedProject[0]);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
+
+// @route   DELETE api/projects/:id
+// @desc    Delete own project
+// @access  Private, student only
+router.delete('/:id', authMiddleware, checkRole('student'), async (req, res) => {
+    try {
+        const [studentRows] = await pool.execute('SELECT id FROM students WHERE user_id = ?', [req.user.id]);
+        const [projectRows] = await pool.execute('SELECT * FROM projects WHERE id = ?', [req.params.id]);
+
+        if (projectRows.length === 0) {
+            return res.status(404).json({ msg: 'Project not found' });
+        }
+
+        if (projectRows[0].student_id !== studentRows[0].id) {
+            return res.status(401).json({ msg: 'Not authorized' });
+        }
+
+        await pool.execute('DELETE FROM projects WHERE id = ?', [req.params.id]);
+        res.json({ msg: 'Project deleted' });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
+
+module.exports = router;
