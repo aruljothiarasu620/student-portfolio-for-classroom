@@ -1,48 +1,24 @@
-const mysql = require('mysql2/promise');
+const { Pool } = require('pg');
 const dotenv = require('dotenv');
-
 dotenv.config();
 
-async function checkDB() {
-    console.log('Connecting with:', {
-        host: process.env.DB_HOST,
-        user: process.env.DB_USER,
-        database: process.env.DB_NAME
-    });
+const pool = new Pool({
+    connectionString: 'postgresql://neondb_owner:npg_IDq1CwYFkyV0@ep-empty-bonus-aire3p4t-pooler.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require',
+    ssl: { rejectUnauthorized: false }
+});
 
+async function testConnection() {
     try {
-        const connection = await mysql.createConnection({
-            host: process.env.DB_HOST || 'localhost',
-            user: process.env.DB_USER || 'root',
-            password: process.env.DB_PASSWORD || '',
-            database: process.env.DB_NAME || 'students_portfolio'
-        });
-
-        console.log('Connection successful!');
-
-        const [tables] = await connection.query('SHOW TABLES');
-        console.log('Tables in DB:', tables);
-
-        const tablesNeeded = ['users', 'classes', 'students', 'projects', 'skills'];
-        const tablesPresent = tables.map(t => Object.values(t)[0]);
-
-        for (const table of tablesNeeded) {
-            if (!tablesPresent.includes(table)) {
-                console.error(`MISSING TABLE: ${table}`);
-            }
-        }
-
-        await connection.end();
+        const client = await pool.connect();
+        console.log('Connected successfully!');
+        const res = await client.query('SELECT NOW()');
+        console.log('Query result:', res.rows[0]);
+        client.release();
     } catch (err) {
-        console.error('DATABASE ERROR:', err.message);
-        if (err.code === 'ER_BAD_DB_ERROR') {
-            console.log('REASON: Database does not exist.');
-        } else if (err.code === 'ECONNREFUSED') {
-            console.log('REASON: MySQL server is not running or port is wrong.');
-        } else if (err.code === 'ER_ACCESS_DENIED_ERROR') {
-            console.log('REASON: Wrong username or password.');
-        }
+        console.error('Connection error:', err);
+    } finally {
+        process.exit();
     }
 }
 
-checkDB();
+testConnection();
