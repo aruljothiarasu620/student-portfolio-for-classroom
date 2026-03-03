@@ -1,8 +1,5 @@
 const path = require('path');
 const { Pool } = require('pg');
-const dotenv = require('dotenv');
-
-dotenv.config();
 
 let db; // SQLite connection
 let pgPool; // PostgreSQL pool
